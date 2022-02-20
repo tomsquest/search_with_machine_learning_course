@@ -1,5 +1,34 @@
 {
   "settings": {
     "index.refresh_interval": "5s"
+  },
+  "mappings": {
+    "dynamic": "false",
+    "properties": {
+      "user": {
+        "type": "keyword"
+      },
+      "sku": {
+        "type": "keyword"
+      },
+      "category": {
+        "type": "keyword"
+      },
+      "query": {
+        "type": "text",
+        "analyzer": "english",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "click_time": {
+        "type": "date"
+      },
+      "query_time": {
+        "type": "date"
+      }
+    }
   }
 }
