@@ -1,5 +1,58 @@
 {
   "settings": {
-    "index.refresh_interval": "5s"
+    "index.refresh_interval": "1m"
+  },
+  "mappings": {
+    "dynamic": "false",
+    "properties": {
+      "productId": {
+        "type": "keyword"
+      },
+      "active": {
+        "type": "boolean"
+      },
+      "name": {
+        "type": "text",
+        "analyzer": "english",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "shortDescription": {
+        "type": "text",
+        "analyzer": "english",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "longDescription": {
+        "type": "text",
+        "analyzer": "english",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "department": {
+        "type": "text",
+        "analyzer": "english",
+        "fields": {
+          "keyword": {
+            "type": "keyword"
+          }
+        }
+      },
+      "regularPrice": {
+        "type": "float"
+      },
+      "image": {
+        "type": "keyword"
+      }
+    }
   }
 }
