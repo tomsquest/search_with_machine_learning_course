@@ -52,6 +52,15 @@
       },
       "image": {
         "type": "keyword"
+      },
+      "salesRankShortTerm": {
+        "type": "integer"
+      },
+      "salesRankMediumTerm": {
+        "type": "integer"
+      },
+      "salesRankLongTerm": {
+        "type": "integer"
       }
     }
   }

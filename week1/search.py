@@ -95,11 +95,56 @@ def query():
 
 def create_query(user_query, filters, sort="_score", sortDir="desc"):
     print("Query: {} Filters: {} Sort: {}".format(user_query, filters, sort))
+
+    query = None
+    if user_query == "*":
+        query = {
+            "match_all": {}
+        }
+    else:
+        query = {
+            "function_score": {
+                "query": {
+                    "query_string": {
+                        "query": "\"{}\"".format(user_query),
+                        "fields": [
+                            "name^100",
+                            "shortDescription^50",
+                            "longDescription^10",
+                            "department"
+                        ]
+                    }
+                },
+                "boost_mode": "replace",
+                "score_mode": "avg",
+                "functions": [
+                    {
+                        "field_value_factor": {
+                            "field": "salesRankShortTerm",
+                            "modifier": "reciprocal",
+                            "missing": 100000000
+                        }
+                    },
+                    {
+                        "field_value_factor": {
+                            "field": "salesRankMediumTerm",
+                            "modifier": "reciprocal",
+                            "missing": 100000000
+                        }
+                    },
+                    {
+                        "field_value_factor": {
+                            "field": "salesRankLongTerm",
+                            "modifier": "reciprocal",
+                            "missing": 100000000
+                        }
+                    }
+                ]
+            }
+        }
     query_obj = {
-        'size': 100,
-        "query": {
-            "match_all": {} # Replace me with a query that both searches and filters
-        },
+        'size': 10,
+        "query": query,
         "aggs": {
             "regularPrice": {
                 "range": {
@@ -115,7 +160,9 @@ def create_query(user_query, filters, sort="_score", sortDir="desc"):
                 },
                 "aggs": {
                     "price_stats": {
-                        "stats": {"field": "regularPrice"}
+                        "stats": {
+                            "field": "regularPrice"
+                        }
                     }
                 }
             },
