@@ -24,16 +24,33 @@ def process_filters(filters_input):
     for filter in filters_input:
         type = request.args.get(filter + ".type")
         display_name = request.args.get(filter + ".displayName", filter)
-        #
-        # We need to capture and return what filters are already applied so they can be automatically added to any existing links we display in aggregations.jinja2
         applied_filters += "&filter.name={}&{}.type={}&{}.displayName={}".format(filter, filter, type, filter,
                                                                                  display_name)
-        #TODO: IMPLEMENT AND SET filters, display_filters and applied_filters.
-        # filters get used in create_query below.  display_filters gets used by display_filters.jinja2 and applied_filters gets used by aggregations.jinja2 (and any other links that would execute a search.)
         if type == "range":
-            pass
+            from_val = request.args.get(filter + ".from", None)
+            to_val = request.args.get(filter + ".to", None)
+            print("from: {}, to: {}".format(from_val, to_val))
+            # we need to turn the "to-from" syntax of aggregations to the "gte,lte" syntax of range filters.
+            to_from = {}
+            if from_val:
+                to_from["gte"] = from_val
+            else:
+                from_val = "*"  # set it to * for display purposes, but don't use it in the query
+            if to_val:
+                to_from["lt"] = to_val
+            else:
+                to_val = "*"  # set it to * for display purposes, but don't use it in the query
+            the_filter = {"range": {filter: to_from}}
+            filters.append(the_filter)
+            display_filters.append("{}: {} TO {}".format(display_name, from_val, to_val))
+            applied_filters += "&{}.from={}&{}.to={}".format(filter, from_val, filter, to_val)
         elif type == "terms":
-            pass #TODO: IMPLEMENT
+            field = request.args.get(filter + ".fieldName", filter)
+            key = request.args.get(filter + ".key", None)
+            the_filter = {"term": {field: key}}
+            filters.append(the_filter)
+            display_filters.append("{}: {}".format(display_name, key))
+            applied_filters += "&{}.fieldName={}&{}.key={}".format(filter, field, filter, key)
     print("Filters: {}".format(filters))
 
     return filters, display_filters, applied_filters
@@ -96,55 +113,65 @@ def query():
 def create_query(user_query, filters, sort="_score", sortDir="desc"):
     print("Query: {} Filters: {} Sort: {}".format(user_query, filters, sort))
 
-    query = None
     if user_query == "*":
-        query = {
-            "match_all": {}
+        searchQuery = {
+            "bool": {
+                "filter": filters,
+                "must": {
+                    "match_all": {}
+                }
+            },
         }
     else:
-        query = {
-            "function_score": {
-                "query": {
-                    "query_string": {
-                        "query": "\"{}\"".format(user_query),
-                        "fields": [
-                            "name^100",
-                            "shortDescription^50",
-                            "longDescription^10",
-                            "department"
+        searchQuery = {
+            "bool": {
+                "filter": filters,
+                "must": {
+                    "function_score": {
+                        "query": {
+                            "query_string": {
+                                "query": "\"{}\"".format(user_query),
+                                "fields": [
+                                    "name^100",
+                                    "shortDescription^50",
+                                    "longDescription^10",
+                                    "department"
+                                ]
+                            }
+                        },
+                        "boost_mode": "replace",
+                        "score_mode": "avg",
+                        "functions": [
+                            {
+                                "field_value_factor": {
+                                    "field": "salesRankShortTerm",
+                                    "modifier": "reciprocal",
+                                    "missing": 100000000
+                                }
+                            },
+                            {
+                                "field_value_factor": {
+                                    "field": "salesRankMediumTerm",
+                                    "modifier": "reciprocal",
+                                    "missing": 100000000
+                                }
+                            },
+                            {
+                                "field_value_factor": {
+                                    "field": "salesRankLongTerm",
+                                    "modifier": "reciprocal",
+                                    "missing": 100000000
+                                }
+                            }
                         ]
                     }
-                },
-                "boost_mode": "replace",
-                "score_mode": "avg",
-                "functions": [
-                    {
-                        "field_value_factor": {
-                            "field": "salesRankShortTerm",
-                            "modifier": "reciprocal",
-                            "missing": 100000000
-                        }
-                    },
-                    {
-                        "field_value_factor": {
-                            "field": "salesRankMediumTerm",
-                            "modifier": "reciprocal",
-                            "missing": 100000000
-                        }
-                    },
-                    {
-                        "field_value_factor": {
-                            "field": "salesRankLongTerm",
-                            "modifier": "reciprocal",
-                            "missing": 100000000
-                        }
-                    }
-                ]
+                }
             }
         }
+
     query_obj = {
         'size': 10,
-        "query": query,
+        "query": searchQuery,
         "aggs": {
             "regularPrice": {
                 "range": {
