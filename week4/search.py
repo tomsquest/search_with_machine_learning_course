@@ -1,6 +1,9 @@
 #
 # The main search hooks for the Search Flask application.
 #
+import \
+    json
+
 from flask import (
     Blueprint, redirect, render_template, request, url_for, current_app
 )
@@ -56,9 +59,37 @@ def process_filters(filters_input):
 
     return filters, display_filters, applied_filters
 
-def get_query_category(user_query, query_class_model):
-    print("IMPLEMENT ME: get_query_category")
-    return None
+
+def accumulate_categories_until_score(cat_scores, score_min, score_limit):
+    total_score = 0
+    codes = []
+    for code, score in cat_scores:
+        if score < score_limit:
+            break
+        total_score += score
+        codes.append(code)
+        if total_score >= score_min:
+            break
+    if total_score < score_min:
+        return []
+    print(f"These categories {codes} cumulate a score of {total_score} (above {score_min}, and each above {score_limit})")
+    return codes
+
+
+def get_query_categories(user_query, query_class_model):
+    num_predictions = 10
+    predictions = query_class_model.predict(user_query, num_predictions)
+    print(f"Fasttext predictions for '{user_query}' are: {predictions}")
+
+    category_codes, scores = predictions
+    category_codes = [s.replace("__label__", "") for s in category_codes]
+    category_scores = zip(category_codes, scores)
+
+    # Accumulate codes until this score is reached
+    score_min = 0.5
+    # Ignore scores below this limit
+    score_limit = 0.1
+    return accumulate_categories_until_score(category_scores, score_min, score_limit)
 
 
 @bp.route('/query', methods=['GET', 'POST'])
@@ -136,10 +167,16 @@ def query():
         query_obj = qu.create_query("*", "", [], sort, sortDir, size=100)
 
     query_class_model = current_app.config["query_model"]
-    query_category = get_query_category(user_query, query_class_model)
-    if query_category is not None:
-        print("IMPLEMENT ME: add this into the filters object so that it gets applied at search time.  This should look like your `term` filter from week 1 for department but for categories instead")
-    #print("query obj: {}".format(query_obj))
+    query_categories = get_query_categories(user_query, query_class_model)
+    if query_categories:
+        query_obj["query"]["bool"]["filter"] = [{
+            "terms": {
+                "categoryPathIds.keyword": query_categories
+            }
+        }]
+
+    # print("query obj: {}".format(json.dumps(query_obj, indent=4)))
+
     response = opensearch.search(body=query_obj, index=current_app.config["index_name"], explain=explain)
     # Postprocess results here if you so desire
 
@@ -147,7 +184,7 @@ def query():
     if error is None:
         return render_template("search_results.jinja2", query=user_query, search_response=response,
                                display_filters=display_filters, applied_filters=applied_filters,
-                               sort=sort, sortDir=sortDir, model=model, explain=explain, query_category=query_category)
+                               sort=sort, sortDir=sortDir, model=model, explain=explain, query_category=query_categories)
     else:
         redirect(url_for("index"))
 
