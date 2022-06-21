@@ -129,7 +129,8 @@ for doc in docs:
 
 # Verify they are in:
 print("We indexed:\n{}".format(client.cat.count(index_name, params={"v": "true"})))
-
+print("Continue?")
+sys.stdin.readline()
 #######################
 #
 # Step 1: Setup LTR storage
@@ -149,7 +150,8 @@ print("\tDeleted old store response status: %s" % resp.status_code)
 # Create our new LTR storage
 resp = requests.put(ltr_model_path, auth=auth, verify=False)
 print("\tCreate the new store response status: %s" % resp.status_code)
-
+print("Continue?")
+sys.stdin.readline()
 #######################
 #
 # Step 2: Setup LTR Featureset
@@ -207,7 +209,8 @@ ltr_feature_set = {"featureset": {
     ]
 }}
 resp = requests.post(featureset_path, headers=headers, data=json.dumps(ltr_feature_set), auth=auth, verify=False)
-
+print("Continue?")
+sys.stdin.readline()
 #######################
 #
 # Step 3: Collect Judgments
@@ -276,7 +279,8 @@ for query in queries:
                     break
             if input == "exit" or input == "e":
                 break  # break out of hits, this is ugly, but OK for what we are doing here
-
+print("Continue?")
+sys.stdin.readline()
 #######################
 #
 # Step 4: Create Training Data (AKA Feature Logging)
@@ -345,7 +349,8 @@ for (idx, item) in enumerate(judgments.items()):
             print("Weirdness. Fix")
 
 train_file.close()
-
+print("Continue?")
+sys.stdin.readline()
 #######################
 #
 # Step 5: Train and Test with XGBoost
@@ -384,6 +389,8 @@ os_model = {
         }
     }
 }
+print("Continue?")
+sys.stdin.readline()
 #######################
 #
 # Step 6: Deploy your Model
@@ -394,7 +401,8 @@ model_path = urljoin(featureset_path + "/", "_createmodel")
 print("Uploading our model to %s" % model_path)
 response = requests.post(model_path, data=json.dumps(os_model), headers=headers, auth=auth, verify=False)
 print("\tResponse: %s" % response)
-
+print("Continue?")
+sys.stdin.readline()
 #######################
 #
 # Step 7: Search with LTR
@@ -438,4 +446,4 @@ print("Response:\n%s" % json.dumps(response, indent=True))
 model_plot = plot_tree(bst, feat_map_file.name)
 model_plot.figure.savefig("ltr_toy_model.png")
 # If you are running in an environment other than Gitpod that can display things, you can also uncomment the next line:
-# plt.show()
+plt.show()
