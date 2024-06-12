@@ -1,6 +1,8 @@
 #
 # The main search hooks for the Search Flask application.
 #
+import json
+
 from flask import (
     Blueprint, redirect, render_template, request, url_for
 )
@@ -22,16 +24,33 @@ def process_filters(filters_input):
     for filter in filters_input:
         type = request.args.get(filter + ".type")
         display_name = request.args.get(filter + ".displayName", filter)
-        #
-        # We need to capture and return what filters are already applied so they can be automatically added to any existing links we display in aggregations.jinja2
         applied_filters += "&filter.name={}&{}.type={}&{}.displayName={}".format(filter, filter, type, filter,
                                                                                  display_name)
-        #TODO: IMPLEMENT AND SET filters, display_filters and applied_filters.
-        # filters get used in create_query below.  display_filters gets used by display_filters.jinja2 and applied_filters gets used by aggregations.jinja2 (and any other links that would execute a search.)
         if type == "range":
-            pass
+            from_val = request.args.get(filter + ".from", None)
+            to_val = request.args.get(filter + ".to", None)
+            print("from: {}, to: {}".format(from_val, to_val))
+            # we need to turn the "to-from" syntax of aggregations to the "gte,lte" syntax of range filters.
+            to_from = {}
+            if from_val:
+                to_from["gte"] = from_val
+            else:
+                from_val = "*"  # set it to * for display purposes, but don't use it in the query
+            if to_val:
+                to_from["lt"] = to_val
+            else:
+                to_val = "*"  # set it to * for display purposes, but don't use it in the query
+            the_filter = {"range": {filter: to_from}}
+            filters.append(the_filter)
+            display_filters.append("{}: {} TO {}".format(display_name, from_val, to_val))
+            applied_filters += "&{}.from={}&{}.to={}".format(filter, from_val, filter, to_val)
         elif type == "terms":
-            pass #TODO: IMPLEMENT
+            field = request.args.get(filter + ".fieldName", filter)
+            key = request.args.get(filter + ".key", None)
+            the_filter = {"term": {field: key}}
+            filters.append(the_filter)
+            display_filters.append("{}: {}".format(display_name, key))
+            applied_filters += "&{}.fieldName={}&{}.key={}".format(filter, field, filter, key)
     print("Filters: {}".format(filters))
 
     return filters, display_filters, applied_filters
@@ -74,10 +93,15 @@ def query():
         query_obj = create_query("*", [], sort, sortDir)
 
     print("query obj: {}".format(query_obj))
-    response = None   # TODO: Replace me with an appropriate call to OpenSearch
+    response = opensearch.search(
+        body=query_obj,
+        index="bbuy_products"
+    )
+
     # Postprocess results here if you so desire
 
-    #print(response)
+    # print(response)
+    print(json.dumps(response, indent=4))
     if error is None:
         return render_template("search_results.jinja2", query=user_query, search_response=response,
                                display_filters=display_filters, applied_filters=applied_filters,
@@ -88,13 +112,97 @@ def query():
 
 def create_query(user_query, filters, sort="_score", sortDir="desc"):
     print("Query: {} Filters: {} Sort: {}".format(user_query, filters, sort))
+
+    if user_query == "*":
+        searchQuery = {
+            "bool": {
+                "filter": filters,
+                "must": {
+                    "match_all": {}
+                }
+            },
+        }
+    else:
+        searchQuery = {
+            "bool": {
+                "filter": filters,
+                "must": {
+                    "function_score": {
+                        "query": {
+                            "query_string": {
+                                "query": "\"{}\"".format(user_query),
+                                "fields": [
+                                    "name^100",
+                                    "shortDescription^50",
+                                    "longDescription^10",
+                                    "department"
+                                ]
+                            }
+                        },
+                        "boost_mode": "replace",
+                        "score_mode": "avg",
+                        "functions": [
+                            {
+                                "field_value_factor": {
+                                    "field": "salesRankShortTerm",
+                                    "modifier": "reciprocal",
+                                    "missing": 100000000
+                                }
+                            },
+                            {
+                                "field_value_factor": {
+                                    "field": "salesRankMediumTerm",
+                                    "modifier": "reciprocal",
+                                    "missing": 100000000
+                                }
+                            },
+                            {
+                                "field_value_factor": {
+                                    "field": "salesRankLongTerm",
+                                    "modifier": "reciprocal",
+                                    "missing": 100000000
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+
     query_obj = {
         'size': 10,
-        "query": {
-            "match_all": {} # Replace me with a query that both searches and filters
-        },
+        "query": searchQuery,
         "aggs": {
-            #TODO: FILL ME IN
+            "regularPrice": {
+                "range": {
+                    "field": "regularPrice",
+                    "ranges": [
+                        {"key": "$", "from": 0, "to": 100},
+                        {"key": "$$", "from": 100, "to": 200},
+                        {"key": "$$$", "from": 200, "to": 300},
+                        {"key": "$$$$", "from": 300, "to": 400},
+                        {"key": "$$$$$", "from": 400, "to": 500},
+                        {"key": "$$$$$$", "from": 500},
+                    ]
+                },
+                "aggs": {
+                    "price_stats": {
+                        "stats": {
+                            "field": "regularPrice"
+                        }
+                    }
+                }
+            },
+            "department": {
+                "terms": {
+                    "field": "department.keyword"
+                }
+            },
+            "missing_images": {
+                "missing": {
+                    "field": "image"
+                }
+            }
         }
     }
     return query_obj

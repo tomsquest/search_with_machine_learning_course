@@ -1,25 +1,34 @@
 input {
   file {
-    path => ["/workspace/datasets/train.csv"]  #Put in the path to the train CSV query data.  To start smaller, simply select a smaller number of files or copy a few files to a different directory.
-    start_position => "beginning"
+    path => ["/home/tom/Dev/search_with_machine_learning_course/train.csv"]
+    mode => "read"
+    exit_after_read => true
+    file_completed_action => "log"
+    file_completed_log_path => "/dev/null"
+    sincedb_path => "/dev/null"
   }
 }
-
 filter {
   csv {
-    autodetect_column_names => true
-    skip_header => true
-    convert => {
-      "click_time" => "date_time"
-      "query_time" => "date_time"
-    }
+#    autodetect_column_names => true
+     columns => ["user","sku","category","query","click_time","query_time"]
+     skip_header => true
+  }
+  date {
+    match => [ "click_time", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm:ss.SS", "yyyy-MM-dd HH:mm:ss.SSS" ]
+    target => "click_time"
+  }
+  date {
+    match => [ "query_time", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm:ss.SS", "yyyy-MM-dd HH:mm:ss.SSS" ]
+    target => "query_time"
   }
   mutate {
-    remove_field => ["message", "host", "path"] # clean up some stuff we don't need
+    # clean up some stuff we don't need
+    remove_field => ["message", "host", "path", "@version", "@timestamp"]
   }
 }
-
 output {
+  #stdout {}
   opensearch {
     hosts => ["https://localhost:9200"]
     index => "bbuy_queries"
@@ -28,3 +37,4 @@ output {
     ssl_certificate_verification => false
   }
 }
+
